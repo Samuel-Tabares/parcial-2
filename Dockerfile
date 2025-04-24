@@ -1,25 +1,37 @@
-FROM python:3.10-slim
+# Usar una imagen base oficial de Python
+FROM python:3.9-slim
 
-# Set environment variables
+# Establecer variables de entorno
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# Set work directory
-WORKDIR /code
+# Establecer el directorio de trabajo
+WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt /code/
-RUN pip install --no-cache-dir -r requirements.txt
+# Copiar los archivos de requerimientos
+COPY requirements.txt .
 
-# Copy project
-COPY . /code/
+# Instalar dependencias del sistema y de Python
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    postgresql-client && \
+    pip install --no-cache-dir -r requirements.txt && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Run migrations and create superuser
-RUN python manage.py migrate
-RUN echo "from django.contrib.auth.models import User, Group; User.objects.create_superuser('admin', 'admin@example.com', 'admin') if not User.objects.filter(username='admin').exists() else None; Group.objects.get_or_create(name='USER'); Group.objects.get_or_create(name='ADMIN'); User.objects.get(username='admin').groups.add(Group.objects.get(name='ADMIN'))" | python manage.py shell
+# Copiar todo el código del proyecto
+COPY . .
 
-# Run server
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Recopilar archivos estáticos
+RUN python manage.py collectstatic --noinput
 
-# Expose port
+# Establecer variables de entorno para la producción
+ENV DJANGO_SETTINGS_MODULE=clientapi.settings
+ENV DEBUG=False
+
+# Exponer el puerto en el que corre la aplicación
 EXPOSE 8000
+
+# Comando para ejecutar la aplicación con gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "clientapi.wsgi:application"]
